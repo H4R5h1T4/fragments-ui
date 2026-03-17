@@ -7,16 +7,37 @@
   <body>
     <h1>Fragments UI</h1>
 
-    <!-- Login/Logout navigation -->
     <nav>
       <button id="login">Login</button>
       <button id="logout">Logout</button>
     </nav>
 
-    <!-- User info section -->
     <section hidden="" id="user">
       <h2>Welcome <span class="username"></span>!</h2>
+      <p><strong>Status:</strong> <span id="auth-status">Logged in</span></p>
+    </section>
+
+    <section hidden="" id="create-fragment">
+      <h2>Create Fragment</h2>
+
+      <label for="fragment-type">Fragment Type</label>
+      <select id="fragment-type">
+        <option value="application/json">application/json</option>
+        <option value="text/markdown">text/markdown</option>
+      </select>
+
+      <label for="fragment-content">Fragment Content</label>
+      <textarea id="fragment-content" rows="8" placeholder="For JSON: {&quot;name&quot;:&quot;Harshita&quot;}
+For Markdown: # Hello Harshita"></textarea>
+
+      <button id="submit-fragment">Create Fragment</button>
+      <p id="create-result"></p>
+    </section>
+
+    <section hidden="" id="fragments-list-section">
+      <h2>Your Fragments</h2>
+      <button id="refresh-fragments">Refresh Fragments</button>
+      <ul id="fragments-list"></ul>
     </section>
   
-
 </body></html>

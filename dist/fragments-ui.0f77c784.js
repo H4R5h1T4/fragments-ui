@@ -715,17 +715,99 @@ function hmrAccept(bundle /*: ParcelRequire */ , id /*: string */ ) {
 
 },{}],"2R06K":[function(require,module,exports,__globalThis) {
 var _authJs = require("./auth.js");
-function init() {
-    const loginBtn = document.querySelector('#login');
-    const userSection = document.querySelector('#user');
-    loginBtn.onclick = ()=>(0, _authJs.signIn)();
-    const user = (0, _authJs.getUser)();
-    if (user) {
-        userSection.hidden = false;
-        userSection.querySelector('.username').innerText = 'Logged in!'; // simple placeholder
-        loginBtn.disabled = true;
+const API_URL = 'http://3.142.248.221:8080';
+async function apiRequest(path, options = {}) {
+    const token = (0, _authJs.getIdToken)();
+    const headers = {
+        ...options.headers || {},
+        Authorization: `Bearer ${token}`
+    };
+    const response = await fetch(`${API_URL}${path}`, {
+        ...options,
+        headers
+    });
+    return response;
+}
+function renderFragments(fragments) {
+    const list = document.querySelector('#fragments-list');
+    list.innerHTML = '';
+    if (!fragments.length) {
+        const li = document.createElement('li');
+        li.textContent = 'No fragments found.';
+        list.appendChild(li);
+        return;
     }
-    document.querySelector('#logout')?.addEventListener('click', ()=>(0, _authJs.signOut)());
+    fragments.forEach((fragment)=>{
+        const li = document.createElement('li');
+        li.innerHTML = `
+      <strong>ID:</strong> ${fragment.id}<br>
+      <strong>Type:</strong> ${fragment.type}<br>
+      <strong>Size:</strong> ${fragment.size}<br>
+      <strong>Created:</strong> ${fragment.created}<br>
+      <strong>Updated:</strong> ${fragment.updated}
+    `;
+        list.appendChild(li);
+    });
+}
+async function loadFragments() {
+    const result = document.querySelector('#create-result');
+    try {
+        const response = await apiRequest('/v1/fragments?expand=1');
+        if (!response.ok) throw new Error('Failed to load fragments');
+        const data = await response.json();
+        renderFragments(data.fragments || []);
+    } catch (err) {
+        result.textContent = `Error loading fragments: ${err.message}`;
+    }
+}
+async function createFragment() {
+    const type = document.querySelector('#fragment-type').value;
+    const content = document.querySelector('#fragment-content').value;
+    const result = document.querySelector('#create-result');
+    try {
+        const response = await apiRequest('/v1/fragments', {
+            method: 'POST',
+            headers: {
+                'Content-Type': type
+            },
+            body: content
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error?.message || 'Failed to create fragment');
+        const location = response.headers.get('Location');
+        result.textContent = `Fragment created successfully. Location: ${location}`;
+        document.querySelector('#fragment-content').value = '';
+        await loadFragments();
+    } catch (err) {
+        result.textContent = `Error creating fragment: ${err.message}`;
+    }
+}
+async function init() {
+    const loginBtn = document.querySelector('#login');
+    const logoutBtn = document.querySelector('#logout');
+    const userSection = document.querySelector('#user');
+    const createSection = document.querySelector('#create-fragment');
+    const listSection = document.querySelector('#fragments-list-section');
+    const username = document.querySelector('.username');
+    const refreshBtn = document.querySelector('#refresh-fragments');
+    const submitBtn = document.querySelector('#submit-fragment');
+    loginBtn.onclick = ()=>(0, _authJs.signIn)();
+    logoutBtn.onclick = ()=>(0, _authJs.signOut)();
+    refreshBtn.onclick = ()=>loadFragments();
+    submitBtn.onclick = ()=>createFragment();
+    try {
+        await (0, _authJs.handleRedirectCallback)();
+    } catch (err) {
+        document.querySelector('#create-result').textContent = `Login error: ${err.message}`;
+    }
+    if ((0, _authJs.isLoggedIn)()) {
+        userSection.hidden = false;
+        createSection.hidden = false;
+        listSection.hidden = false;
+        username.innerText = 'Harshita';
+        loginBtn.disabled = true;
+        await loadFragments();
+    }
 }
 document.addEventListener('DOMContentLoaded', init);
 
@@ -734,35 +816,63 @@ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "signIn", ()=>signIn);
 parcelHelpers.export(exports, "signOut", ()=>signOut);
-parcelHelpers.export(exports, "getUser", ()=>getUser);
-var $316fe6712b5ab0e4$import_meta = Object.assign(Object.create(null), {
-    url: "file:///src/auth.js"
-});
-console.log("COGNITO_DOMAIN:", COGNITO_DOMAIN);
-console.log("CLIENT_ID:", CLIENT_ID);
-console.log("REDIRECT_URI:", REDIRECT_URI);
-/// auth.js
-const COGNITO_DOMAIN = $316fe6712b5ab0e4$import_meta.env.REACT_APP_COGNITO_DOMAIN;
-const CLIENT_ID = $316fe6712b5ab0e4$import_meta.env.REACT_APP_CLIENT_ID;
-const REDIRECT_URI = $316fe6712b5ab0e4$import_meta.env.REACT_APP_REDIRECT_URI;
-const LOGOUT_URI = $316fe6712b5ab0e4$import_meta.env.REACT_APP_LOGOUT_URI;
+parcelHelpers.export(exports, "getIdToken", ()=>getIdToken);
+parcelHelpers.export(exports, "isLoggedIn", ()=>isLoggedIn);
+parcelHelpers.export(exports, "handleRedirectCallback", ()=>handleRedirectCallback);
+const COGNITO_DOMAIN = "http://us-east-2z98keskqd.auth.us-east-2.amazoncognito.com";
+const CLIENT_ID = "5acj7r8ujquvhl57h7b5ja8d9q";
+const REDIRECT_URI = "http://localhost:1234";
+const LOGOUT_URI = "http://localhost:1234";
 const RESPONSE_TYPE = 'code';
 const SCOPE = 'openid email phone';
+console.log('COGNITO_DOMAIN =', COGNITO_DOMAIN);
+console.log('CLIENT_ID =', CLIENT_ID);
+console.log('REDIRECT_URI =', REDIRECT_URI);
+function getTokenEndpoint() {
+    return `${COGNITO_DOMAIN}/oauth2/token`;
+}
 function signIn() {
     const loginUrl = `${COGNITO_DOMAIN}/oauth2/authorize?client_id=${CLIENT_ID}&response_type=${RESPONSE_TYPE}&scope=${encodeURIComponent(SCOPE)}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
     window.location.href = loginUrl;
 }
 function signOut() {
+    localStorage.removeItem('id_token');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     const logoutUrl = `${COGNITO_DOMAIN}/logout?client_id=${CLIENT_ID}&logout_uri=${encodeURIComponent(LOGOUT_URI)}`;
     window.location.href = logoutUrl;
 }
-function getUser() {
+function getIdToken() {
+    return localStorage.getItem('id_token');
+}
+function isLoggedIn() {
+    return !!getIdToken();
+}
+async function handleRedirectCallback() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (!code) return null;
-    return {
-        code
-    };
+    const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: CLIENT_ID,
+        code,
+        redirect_uri: REDIRECT_URI
+    });
+    const response = await fetch(getTokenEndpoint(), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body
+    });
+    if (!response.ok) throw new Error('Failed to exchange authorization code for tokens');
+    const tokens = await response.json();
+    localStorage.setItem('id_token', tokens.id_token);
+    localStorage.setItem('access_token', tokens.access_token || '');
+    localStorage.setItem('refresh_token', tokens.refresh_token || '');
+    // Clean the URL after login so the code param disappears
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return tokens;
 }
 
 },{"@parcel/transformer-js/src/esmodule-helpers.js":"jnFvT"}],"jnFvT":[function(require,module,exports,__globalThis) {
