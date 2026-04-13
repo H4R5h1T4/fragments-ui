@@ -715,7 +715,8 @@ function hmrAccept(bundle /*: ParcelRequire */ , id /*: string */ ) {
 
 },{}],"2R06K":[function(require,module,exports,__globalThis) {
 var _authJs = require("./auth.js");
-const API_URL = 'http://3.142.248.221:8080';
+const API_URL = "http://localhost:8080";
+let editingFragment = null;
 async function apiRequest(path, options = {}) {
     const token = (0, _authJs.getIdToken)();
     const headers = {
@@ -744,20 +745,45 @@ function renderFragments(fragments) {
       <strong>Type:</strong> ${fragment.type}<br>
       <strong>Size:</strong> ${fragment.size}<br>
       <strong>Created:</strong> ${fragment.created}<br>
-      <strong>Updated:</strong> ${fragment.updated}
+      <strong>Updated:</strong> ${fragment.updated}<br><br>
+
+      <button class="edit-fragment" data-id="${fragment.id}" data-type="${fragment.type}">
+        Edit
+      </button>
+
+      <button class="delete-fragment" data-id="${fragment.id}">
+        Delete
+      </button>
     `;
         list.appendChild(li);
+    });
+    document.querySelectorAll('.delete-fragment').forEach((button)=>{
+        button.onclick = async ()=>{
+            const id = button.dataset.id;
+            await deleteFragment(id);
+        };
+    });
+    document.querySelectorAll('.edit-fragment').forEach((button)=>{
+        button.onclick = async ()=>{
+            const id = button.dataset.id;
+            const type = button.dataset.type;
+            await startEditFragment(id, type);
+        };
     });
 }
 async function loadFragments() {
     const result = document.querySelector('#create-result');
     try {
         const response = await apiRequest('/v1/fragments?expand=1');
-        if (!response.ok) throw new Error('Failed to load fragments');
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Load failed: ${response.status} ${text}`);
+        }
         const data = await response.json();
         renderFragments(data.fragments || []);
     } catch (err) {
         result.textContent = `Error loading fragments: ${err.message}`;
+        console.error(err);
     }
 }
 async function createFragment() {
@@ -765,21 +791,86 @@ async function createFragment() {
     const content = document.querySelector('#fragment-content').value;
     const result = document.querySelector('#create-result');
     try {
-        const response = await apiRequest('/v1/fragments', {
-            method: 'POST',
+        const isEditing = !!editingFragment;
+        const path = isEditing ? `/v1/fragments/${editingFragment.id}` : '/v1/fragments';
+        const method = isEditing ? 'PUT' : 'POST';
+        const response = await apiRequest(path, {
+            method,
             headers: {
                 'Content-Type': type
             },
             body: content
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error?.message || 'Failed to create fragment');
-        const location = response.headers.get('Location');
-        result.textContent = `Fragment created successfully. Location: ${location}`;
+        const text = await response.text();
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch  {
+            data = {
+                raw: text
+            };
+        }
+        if (!response.ok) throw new Error(data?.error?.message || `Request failed: ${response.status}`);
+        if (isEditing) {
+            result.textContent = `Fragment updated successfully: ${editingFragment.id}`;
+            editingFragment = null;
+            document.querySelector('#submit-fragment').textContent = 'Create Fragment';
+        } else {
+            const location = response.headers.get('Location');
+            result.textContent = `Fragment created successfully. Location: ${location}`;
+        }
         document.querySelector('#fragment-content').value = '';
         await loadFragments();
     } catch (err) {
-        result.textContent = `Error creating fragment: ${err.message}`;
+        result.textContent = `Error creating/updating fragment: ${err.message}`;
+    }
+}
+async function deleteFragment(id) {
+    const result = document.querySelector('#create-result');
+    try {
+        const response = await apiRequest(`/v1/fragments/${id}`, {
+            method: 'DELETE'
+        });
+        const text = await response.text();
+        let data = {};
+        try {
+            data = JSON.parse(text);
+        } catch  {
+            data = {
+                raw: text
+            };
+        }
+        if (!response.ok) throw new Error(data?.error?.message || 'Delete failed');
+        result.textContent = `Fragment deleted successfully: ${id}`;
+        if (editingFragment && editingFragment.id === id) {
+            editingFragment = null;
+            document.querySelector('#fragment-content').value = '';
+            document.querySelector('#submit-fragment').textContent = 'Create Fragment';
+        }
+        await loadFragments();
+    } catch (err) {
+        result.textContent = `Error deleting fragment: ${err.message}`;
+    }
+}
+async function startEditFragment(id, type) {
+    const result = document.querySelector('#create-result');
+    try {
+        const response = await apiRequest(`/v1/fragments/${id}`);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Failed to load fragment: ${text}`);
+        }
+        const content = await response.text();
+        editingFragment = {
+            id,
+            type
+        };
+        document.querySelector('#fragment-type').value = type;
+        document.querySelector('#fragment-content').value = content;
+        document.querySelector('#submit-fragment').textContent = 'Update Fragment';
+        result.textContent = `Editing fragment: ${id}`;
+    } catch (err) {
+        result.textContent = `Error loading fragment: ${err.message}`;
     }
 }
 async function init() {
@@ -819,7 +910,7 @@ parcelHelpers.export(exports, "signOut", ()=>signOut);
 parcelHelpers.export(exports, "getIdToken", ()=>getIdToken);
 parcelHelpers.export(exports, "isLoggedIn", ()=>isLoggedIn);
 parcelHelpers.export(exports, "handleRedirectCallback", ()=>handleRedirectCallback);
-const COGNITO_DOMAIN = "http://us-east-2z98keskqd.auth.us-east-2.amazoncognito.com";
+const COGNITO_DOMAIN = "https://us-east-2z98keskqd.auth.us-east-2.amazoncognito.com";
 const CLIENT_ID = "5acj7r8ujquvhl57h7b5ja8d9q";
 const REDIRECT_URI = "http://localhost:1234";
 const LOGOUT_URI = "http://localhost:1234";
